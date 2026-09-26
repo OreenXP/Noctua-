@@ -1,0 +1,25 @@
+import { Button, VerticalBox } from "std-widgets.slint";
+
+export component MainWindow inherits Window {
+    title: "Noctua";
+    width: 800px;
+    height: 600px;
+
+    VerticalBox {
+        padding: 24px;
+        spacing: 12px;
+
+        Text {
+            text: "Noctua";
+            font-size: 32px;
+        }
+
+        Text {
+            text: "Lector de documentos PDF";
+        }
+
+        Button {
+            text: "Abrir PDF";
+        }
+    }
+}

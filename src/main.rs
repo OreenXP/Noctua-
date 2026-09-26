@@ -2,6 +2,6 @@ mod app;
 mod pdf;
 mod ui;
 
-fn main() -> eframe::Result {
+fn main() -> Result<(), slint::PlatformError> {
     app::run()
 }

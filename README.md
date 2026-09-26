@@ -7,7 +7,7 @@ Noctua es un lector de documentos PDF de escritorio escrito en Rust. Su objetivo
 Noctua se encuentra en una etapa inicial de desarrollo. Actualmente cuenta con:
 
 - Una arquitectura modular básica.
-- Una ventana de escritorio creada con `egui` y `eframe`.
+- Una ventana de escritorio creada con Slint.
 - Módulos iniciales para la aplicación, la interfaz y el futuro procesamiento de PDF.
 
 Todavía no es posible abrir ni visualizar documentos PDF.
@@ -32,12 +32,16 @@ src/
 │   └── mod.rs
 └── ui/
     └── mod.rs
+
+views/
+└── main-window.slint
 ```
 
 - `main.rs`: punto de entrada del programa.
 - `app.rs`: estado y coordinación de la aplicación.
 - `pdf`: funcionalidad relacionada con documentos PDF.
-- `ui`: presentación e interacción con el usuario.
+- `ui`: adaptador Rust que conecta la aplicación con Slint.
+- `views/main-window.slint`: presentación declarativa de la ventana.
 
 Los módulos de traducción, almacenamiento y OCR se añadirán cuando exista funcionalidad real para ellos.
 
