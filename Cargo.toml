@@ -7,4 +7,7 @@ license = "GPL-3.0-only"
 repository = "https://github.com/OreenXP/Noctua-"
 
 [dependencies]
-eframe = "0.36.2"
+slint = "1.18"
+
+[build-dependencies]
+slint-build = "1.18"
