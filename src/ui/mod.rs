@@ -1,7 +1,11 @@
+//! Adaptador entre la aplicación y la interfaz creada con Slint.
 
-pub(crate) fn draw(ui: &mut eframe::egui::Ui) {
-    eframe::egui::CentralPanel::default().show(ui, |ui| {
-        ui.heading("Noctua");
-        ui.label("Empieza el prime.");
-    });
+use slint::ComponentHandle;
+
+slint::include_modules!();
+
+/// Construye y muestra la ventana principal.
+pub(crate) fn run() -> Result<(), slint::PlatformError> {
+    let window = MainWindow::new()?;
+    window.run()
 }
