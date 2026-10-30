@@ -5,6 +5,10 @@ export component MainWindow inherits Window {
     width: 800px;
     height: 600px;
 
+    callback abrir-pdf();
+
+    in-out property <string> estado: "";
+
     VerticalBox {
         padding: 24px;
         spacing: 12px;
@@ -20,6 +24,12 @@ export component MainWindow inherits Window {
 
         Button {
             text: "Abrir PDF";
+            clicked => { root.abrir-pdf(); }
+        }
+
+        Text {
+            text: root.estado;
+            wrap: word-wrap;
         }
     }
 }
