@@ -16,6 +16,6 @@ pub(crate) fn is_pdf(path: &Path) -> bool {
 }
 
 pub(crate) fn open_externally(path: &Path) -> io::Result<()> {
-    open::that(path)?;
+    open::that_detached(path)?;
     Ok(())
 }
