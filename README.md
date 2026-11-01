@@ -48,13 +48,43 @@ Los módulos de traducción, almacenamiento y OCR se añadirán cuando exista fu
 ## Requisitos
 
 - Una instalación estable de [Rust](https://www.rust-lang.org/tools/install).
-- Cargo, instalado junto con Rust.
-- En Linux, las dependencias de WebKitGTK requeridas por Tauri (`webkit2gtk-4.1` y `javascriptcoregtk-4.1`).
+- Git.
+- Las dependencias nativas de Tauri según tu sistema operativo.
 
-En Arch Linux puedes instalarlas con:
+### Arch Linux
 
 ```bash
-sudo pacman -Syu --needed webkit2gtk-4.1
+sudo pacman -Syu --needed base-devel webkit2gtk-4.1
+```
+
+### Debian y Ubuntu
+
+```bash
+sudo apt update
+sudo apt install libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev \
+  libssl-dev libayatana-appindicator3-dev librsvg2-dev
+```
+
+### Fedora
+
+```bash
+sudo dnf install webkit2gtk4.1-devel openssl-devel \
+  libappindicator-gtk3-devel librsvg2-devel
+```
+
+### Windows
+
+Instala lo siguiente antes de compilar:
+
+1. [Rust](https://www.rust-lang.org/tools/install), usando el toolchain MSVC.
+2. [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) con la carga “Desarrollo para el escritorio con C++”.
+3. [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/), normalmente ya instalado en Windows 10 y 11.
+
+Después, en PowerShell:
+
+```powershell
+rustup default stable-x86_64-pc-windows-msvc
+cargo install tauri-cli --version "^2.0.0"
 ```
 
 ## Ejecutar el proyecto
@@ -66,10 +96,7 @@ git clone https://github.com/OreenXP/Noctua-.git
 cd Noctua-
 ```
 
-Cambia a la rama de desarrollo y ejecuta la aplicación:
-
 ```bash
-git switch dev
 cargo run
 ```
 
@@ -79,6 +106,10 @@ cargo run
 cargo install tauri-cli --version '^2.0.0'
 cargo tauri dev
 ```
+
+En Windows usa los mismos comandos desde PowerShell.
+
+Actualmente Noctua no publica instaladores precompilados para Windows o Linux; la forma recomendada de probar esta versión es compilarla desde el código fuente con `cargo run`. Los instaladores se añadirán cuando el proceso de distribución esté configurado.
 
 La primera compilación puede tardar mientras Cargo descarga y compila las dependencias.
 
