@@ -6,11 +6,13 @@ Noctua es un lector de documentos PDF de escritorio escrito en Rust. Su objetivo
 
 Noctua se encuentra en una etapa inicial de desarrollo. Actualmente cuenta con:
 
-- Una arquitectura modular básica.
-- Una ventana de escritorio creada con Slint.
-- Módulos iniciales para la aplicación, la interfaz y el futuro procesamiento de PDF.
+- Una arquitectura Tauri con backend Rust y frontend web.
+- Una ventana de escritorio creada con Tauri y HTML/CSS/JavaScript.
+- Selección persistente de una carpeta como vault de libros.
+- Detección automática de PDFs, incluyendo subcarpetas.
+- Apertura externa con doble clic, clic derecho o el botón de abrir.
 
-Todavía no es posible abrir ni visualizar documentos PDF.
+Los PDFs se abren con la aplicación predeterminada del sistema. La visualización integrada se añadirá más adelante.
 
 ## Funciones planeadas
 
@@ -27,21 +29,19 @@ Todavía no es posible abrir ni visualizar documentos PDF.
 ```text
 src/
 ├── main.rs
-├── app.rs
-├── pdf/
-│   └── mod.rs
-└── ui/
+└── pdf/
     └── mod.rs
+web/
+├── index.html
+├── styles.css
+├── app.js
+└── assets/icons/
 
-views/
-└── main-window.slint
 ```
 
-- `main.rs`: punto de entrada del programa.
-- `app.rs`: estado y coordinación de la aplicación.
+- `main.rs`: comandos Tauri, configuración del vault y escaneo de PDFs.
 - `pdf`: funcionalidad relacionada con documentos PDF.
-- `ui`: adaptador Rust que conecta la aplicación con Slint.
-- `views/main-window.slint`: presentación declarativa de la ventana.
+- `web`: interfaz web y estilos de la biblioteca.
 
 Los módulos de traducción, almacenamiento y OCR se añadirán cuando exista funcionalidad real para ellos.
 
@@ -49,6 +49,13 @@ Los módulos de traducción, almacenamiento y OCR se añadirán cuando exista fu
 
 - Una instalación estable de [Rust](https://www.rust-lang.org/tools/install).
 - Cargo, instalado junto con Rust.
+- En Linux, las dependencias de WebKitGTK requeridas por Tauri (`webkit2gtk-4.1` y `javascriptcoregtk-4.1`).
+
+En Arch Linux puedes instalarlas con:
+
+```bash
+sudo pacman -Syu --needed webkit2gtk-4.1
+```
 
 ## Ejecutar el proyecto
 
@@ -66,6 +73,13 @@ git switch dev
 cargo run
 ```
 
+`cargo run` compila y abre la aplicación usando los archivos de `web/`. Para desarrollo con recarga de la interfaz, instala la CLI de Tauri y ejecuta:
+
+```bash
+cargo install tauri-cli --version '^2.0.0'
+cargo tauri dev
+```
+
 La primera compilación puede tardar mientras Cargo descarga y compila las dependencias.
 
 ## Comandos de desarrollo
@@ -75,6 +89,12 @@ cargo fmt --check
 cargo check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test
+```
+
+También puedes comprobar la sintaxis del frontend con:
+
+```bash
+node --check web/app.js
 ```
 
 ## Contribuir
