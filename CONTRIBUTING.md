@@ -39,7 +39,7 @@ Usa nombres de rama breves y descriptivos, por ejemplo:
 - Sigue las convenciones habituales de Rust.
 - Usa `rustfmt` para mantener un formato uniforme.
 - Atiende las advertencias de Clippy.
-- Conserva la separación entre los comandos Rust de `src/main.rs`, la lógica PDF de `src/pdf` y la interfaz web de `web/`.
+- Conserva la separación entre la lógica de biblioteca de `src/library.rs`, la interfaz de `src/app.rs` y `src/ui`, y la lógica PDF de `src/pdf`.
 - No añadas módulos o dependencias sin una necesidad actual y clara.
 - Evita mezclar refactorizaciones no relacionadas con la función o corrección principal.
 - Añade o actualiza pruebas cuando el comportamiento pueda verificarse automáticamente.

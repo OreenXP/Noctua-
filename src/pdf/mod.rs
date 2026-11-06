@@ -1,8 +1,7 @@
-//! Apertura, lectura y renderizado de documentos PDF.
+//! Utilidades de PDF.
 //!
-//! El módulo se implementará cuando se integre el motor PDF. Permanece vacío
-//! para establecer desde el inicio su frontera dentro de la aplicación.
-use std::io;
+//! De momento solo incluye la detección de archivos PDF. La apertura, lectura
+//! y renderizado se añadirán cuando se integre el motor PDF.
 use std::path::Path;
 
 pub(crate) fn is_pdf(path: &Path) -> bool {
@@ -13,9 +12,4 @@ pub(crate) fn is_pdf(path: &Path) -> bool {
         return false;
     };
     extension.eq_ignore_ascii_case("pdf")
-}
-
-pub(crate) fn open_externally(path: &Path) -> io::Result<()> {
-    open::that_detached(path)?;
-    Ok(())
 }
