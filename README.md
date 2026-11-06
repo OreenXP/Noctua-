@@ -6,11 +6,11 @@ Noctua es un lector de documentos PDF de escritorio escrito en Rust. Su objetivo
 
 Noctua se encuentra en una etapa inicial de desarrollo. Actualmente cuenta con:
 
-- Una arquitectura Tauri con backend Rust y frontend web.
-- Una ventana de escritorio creada con Tauri y HTML/CSS/JavaScript.
+- Una interfaz de escritorio nativa construida con [GPUI](https://github.com/zed-industries/zed/tree/main/crates/gpui).
 - Selección persistente de una carpeta como vault de libros.
 - Detección automática de PDFs, incluyendo subcarpetas.
-- Apertura externa con doble clic, clic derecho o el botón de abrir.
+- Búsqueda, ordenación por fecha, nombre o tamaño y vistas de lista o cuadrícula.
+- Apertura externa con doble clic, menú contextual o el botón de abrir.
 
 Los PDFs se abren con la aplicación predeterminada del sistema. La visualización integrada se añadirá más adelante.
 
@@ -27,65 +27,57 @@ Los PDFs se abren con la aplicación predeterminada del sistema. La visualizaci�
 ## Estructura actual
 
 ```text
+assets/
+└── icons/
 src/
 ├── main.rs
+├── app.rs
+├── library.rs
+├── ui/
+│   ├── assets.rs
+│   ├── components.rs
+│   ├── mod.rs
+│   ├── text_input.rs
+│   ├── theme.rs
+│   └── welcome.rs
 └── pdf/
     └── mod.rs
-web/
-├── index.html
-├── styles.css
-├── app.js
-└── assets/icons/
-
 ```
 
-- `main.rs`: comandos Tauri, configuración del vault y escaneo de PDFs.
+- `main.rs`: arranque de la aplicación, ventana y atajos de teclado.
+- `app.rs`: estado de la biblioteca y composición de la interfaz.
+- `library.rs`: configuración del vault, escaneo recursivo y formato.
+- `ui`: tema, componentes, campo de búsqueda y pantalla de bienvenida.
 - `pdf`: funcionalidad relacionada con documentos PDF.
-- `web`: interfaz web y estilos de la biblioteca.
 
 Los módulos de traducción, almacenamiento y OCR se añadirán cuando exista funcionalidad real para ellos.
 
 ## Requisitos
 
-- Una instalación estable de [Rust](https://www.rust-lang.org/tools/install).
+- Una instalación estable de [Rust](https://www.rust-lang.org/tools/install) con soporte para la edición 2024.
 - Git.
-- Las dependencias nativas de Tauri según tu sistema operativo.
+- Linux con Wayland o X11. GPUI también es compatible con macOS y Windows, aunque esta versión se prueba principalmente en Linux.
 
 ### Arch Linux
 
 ```bash
-sudo pacman -Syu --needed base-devel webkit2gtk-4.1
+sudo pacman -Syu --needed base-devel clang pkg-config fontconfig freetype2 \
+  libxkbcommon libxkbcommon-x11 libxcb wayland vulkan-icd-loader
 ```
 
 ### Debian y Ubuntu
 
 ```bash
 sudo apt update
-sudo apt install libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev \
-  libssl-dev libayatana-appindicator3-dev librsvg2-dev
-```
-
-### Fedora
-
-```bash
-sudo dnf install webkit2gtk4.1-devel openssl-devel \
-  libappindicator-gtk3-devel librsvg2-devel
+sudo apt install build-essential clang pkg-config libfontconfig-dev libfreetype-dev \
+  libxkbcommon-dev libxkbcommon-x11-dev libxcb1-dev libwayland-dev libvulkan-dev
 ```
 
 ### Windows
 
-Instala lo siguiente antes de compilar:
-
-1. [Rust](https://www.rust-lang.org/tools/install), usando el toolchain MSVC.
-2. [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) con la carga “Desarrollo para el escritorio con C++”.
-3. [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/), normalmente ya instalado en Windows 10 y 11.
-
-Después, en PowerShell:
-
-```powershell
-rustup default stable-x86_64-pc-windows-msvc
-cargo install tauri-cli --version "^2.0.0"
-```
+1. Instala [Rust](https://www.rust-lang.org/tools/install) con el toolchain MSVC.
+2. Instala [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) con la carga «Desarrollo para el escritorio con C++».
+3. Asegúrate de tener instalados los controladores gráficos actualizados.
 
 ## Ejecutar el proyecto
 
@@ -100,18 +92,9 @@ cd Noctua-
 cargo run
 ```
 
-`cargo run` compila y abre la aplicación usando los archivos de `web/`. Para desarrollo con recarga de la interfaz, instala la CLI de Tauri y ejecuta:
-
-```bash
-cargo install tauri-cli --version '^2.0.0'
-cargo tauri dev
-```
-
-En Windows usa los mismos comandos desde PowerShell.
+La primera compilación puede tardar mientras Cargo descarga y compila GPUI y sus dependencias. La interfaz usa una revisión fija de GPUI (definida en `Cargo.toml`), por lo que no se necesita Node ni un navegador embebido.
 
 Actualmente Noctua no publica instaladores precompilados para Windows o Linux; la forma recomendada de probar esta versión es compilarla desde el código fuente con `cargo run`. Los instaladores se añadirán cuando el proceso de distribución esté configurado.
-
-La primera compilación puede tardar mientras Cargo descarga y compila las dependencias.
 
 ## Comandos de desarrollo
 
@@ -120,12 +103,6 @@ cargo fmt --check
 cargo check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test
-```
-
-También puedes comprobar la sintaxis del frontend con:
-
-```bash
-node --check web/app.js
 ```
 
 ## Contribuir
