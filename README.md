@@ -6,11 +6,13 @@ Noctua es un lector de documentos PDF de escritorio escrito en Rust. Su objetivo
 
 Noctua se encuentra en una etapa inicial de desarrollo. Actualmente cuenta con:
 
-- Una arquitectura modular básica.
-- Una ventana de escritorio creada con Slint.
-- Módulos iniciales para la aplicación, la interfaz y el futuro procesamiento de PDF.
+- Una interfaz de escritorio nativa construida con [GPUI](https://github.com/zed-industries/zed/tree/main/crates/gpui).
+- Selección persistente de una carpeta como vault de libros.
+- Detección automática de PDFs, incluyendo subcarpetas.
+- Búsqueda, ordenación por fecha, nombre o tamaño y vistas de lista o cuadrícula.
+- Apertura externa con doble clic, menú contextual o el botón de abrir.
 
-Todavía no es posible abrir ni visualizar documentos PDF.
+Los PDFs se abren con la aplicación predeterminada del sistema. La visualización integrada se añadirá más adelante.
 
 ## Funciones planeadas
 
@@ -25,30 +27,57 @@ Todavía no es posible abrir ni visualizar documentos PDF.
 ## Estructura actual
 
 ```text
+assets/
+└── icons/
 src/
 ├── main.rs
 ├── app.rs
-├── pdf/
-│   └── mod.rs
-└── ui/
+├── library.rs
+├── ui/
+│   ├── assets.rs
+│   ├── components.rs
+│   ├── mod.rs
+│   ├── text_input.rs
+│   ├── theme.rs
+│   └── welcome.rs
+└── pdf/
     └── mod.rs
-
-views/
-└── main-window.slint
 ```
 
-- `main.rs`: punto de entrada del programa.
-- `app.rs`: estado y coordinación de la aplicación.
+- `main.rs`: arranque de la aplicación, ventana y atajos de teclado.
+- `app.rs`: estado de la biblioteca y composición de la interfaz.
+- `library.rs`: configuración del vault, escaneo recursivo y formato.
+- `ui`: tema, componentes, campo de búsqueda y pantalla de bienvenida.
 - `pdf`: funcionalidad relacionada con documentos PDF.
-- `ui`: adaptador Rust que conecta la aplicación con Slint.
-- `views/main-window.slint`: presentación declarativa de la ventana.
 
 Los módulos de traducción, almacenamiento y OCR se añadirán cuando exista funcionalidad real para ellos.
 
 ## Requisitos
 
-- Una instalación estable de [Rust](https://www.rust-lang.org/tools/install).
-- Cargo, instalado junto con Rust.
+- Una instalación estable de [Rust](https://www.rust-lang.org/tools/install) con soporte para la edición 2024.
+- Git.
+- Linux con Wayland o X11. GPUI también es compatible con macOS y Windows, aunque esta versión se prueba principalmente en Linux.
+
+### Arch Linux
+
+```bash
+sudo pacman -Syu --needed base-devel clang pkg-config fontconfig freetype2 \
+  libxkbcommon libxkbcommon-x11 libxcb wayland vulkan-icd-loader
+```
+
+### Debian y Ubuntu
+
+```bash
+sudo apt update
+sudo apt install build-essential clang pkg-config libfontconfig-dev libfreetype-dev \
+  libxkbcommon-dev libxkbcommon-x11-dev libxcb1-dev libwayland-dev libvulkan-dev
+```
+
+### Windows
+
+1. Instala [Rust](https://www.rust-lang.org/tools/install) con el toolchain MSVC.
+2. Instala [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) con la carga «Desarrollo para el escritorio con C++».
+3. Asegúrate de tener instalados los controladores gráficos actualizados.
 
 ## Ejecutar el proyecto
 
@@ -59,14 +88,13 @@ git clone https://github.com/OreenXP/Noctua-.git
 cd Noctua-
 ```
 
-Cambia a la rama de desarrollo y ejecuta la aplicación:
-
 ```bash
-git switch dev
 cargo run
 ```
 
-La primera compilación puede tardar mientras Cargo descarga y compila las dependencias.
+La primera compilación puede tardar mientras Cargo descarga y compila GPUI y sus dependencias. La interfaz usa una revisión fija de GPUI (definida en `Cargo.toml`), por lo que no se necesita Node ni un navegador embebido.
+
+Actualmente Noctua no publica instaladores precompilados para Windows o Linux; la forma recomendada de probar esta versión es compilarla desde el código fuente con `cargo run`. Los instaladores se añadirán cuando el proceso de distribución esté configurado.
 
 ## Comandos de desarrollo
 
