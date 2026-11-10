@@ -11,6 +11,7 @@ use gpui::{
 use crate::library::{self, Book};
 use crate::ui::{
     components::{self, ButtonVariant},
+    reader,
     text_input::TextInput,
     theme, welcome,
 };
@@ -1017,45 +1018,13 @@ impl NoctuaApp {
         let Some(document) = &self.document else {
             return div().into_any_element();
         };
-        div()
-            .flex()
-            .flex_col()
-            .size_full()
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .h(px(64.))
-                    .px(px(24.))
-                    .border_b_1()
-                    .border_color(theme::border())
-                    .child(
-                        components::button("reader-back", "Volver", None, ButtonVariant::Secondary)
-                            .on_click(cx.listener(|this, _, _, cx| this.back_to_library(cx))),
-                    ),
-            )
-            .child(
-                div()
-                    .flex()
-                    .flex_1()
-                    .flex_col()
-                    .items_center()
-                    .justify_center()
-                    .gap(px(6.))
-                    .child(
-                        div()
-                            .text_size(px(14.))
-                            .text_color(theme::text())
-                            .child(document.name.clone()),
-                    )
-                    .child(
-                        div()
-                            .text_size(px(11.))
-                            .text_color(theme::faint())
-                            .child(document.path.clone()),
-                    ),
-            )
-            .into_any_element()
+
+        reader::reader(
+            document.name.clone().into(),
+            document.path.clone().into(),
+            cx.listener(|this, _, _, cx| this.back_to_library(cx)),
+        )
+        .into_any_element()
     }
 
     fn render_library(
