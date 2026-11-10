@@ -26,6 +26,7 @@ const COMPACT_WIDTH: f32 = 980.0;
 enum Screen {
     Welcome,
     Library,
+    Reader,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -51,6 +52,11 @@ enum View {
     Grid,
 }
 
+struct Document {
+    path: String,
+    name: String,
+}
+
 struct ContextMenuState {
     path: String,
     name: String,
@@ -59,6 +65,7 @@ struct ContextMenuState {
 
 pub struct NoctuaApp {
     screen: Screen,
+    document: Option<Document>,
     vault: Option<PathBuf>,
     books: Vec<Book>,
     filtered: Vec<usize>,
@@ -85,6 +92,7 @@ impl NoctuaApp {
             } else {
                 Screen::Welcome
             },
+            document: None,
             vault,
             books: Vec::new(),
             filtered: Vec::new(),
@@ -249,7 +257,11 @@ impl NoctuaApp {
     }
 
     fn open_book(&mut self, path: &str, name: &str, cx: &mut Context<Self>) {
-        cx.open_with_system(std::path::Path::new(path));
+        self.document = Some(Document {
+            path: path.to_string(),
+            name: name.to_string(),
+        });
+        self.screen = Screen::Reader;
         self.status = format!("Abierto · {name}");
         cx.notify();
     }
@@ -270,6 +282,15 @@ impl NoctuaApp {
             self.sort_open = false;
             cx.notify();
         }
+        if self.screen == Screen::Reader {
+            self.back_to_library(cx);
+        }
+    }
+
+    fn back_to_library(&mut self, cx: &mut Context<Self>) {
+        self.screen = Screen::Library;
+        self.document = None;
+        cx.notify();
     }
 
     fn select_sort(&mut self, sort: Sort, cx: &mut Context<Self>) {
@@ -992,6 +1013,51 @@ impl NoctuaApp {
         overlays
     }
 
+    fn render_reader(&mut self, cx: &mut Context<Self>) -> AnyElement {
+        let Some(document) = &self.document else {
+            return div().into_any_element();
+        };
+        div()
+            .flex()
+            .flex_col()
+            .size_full()
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .h(px(64.))
+                    .px(px(24.))
+                    .border_b_1()
+                    .border_color(theme::border())
+                    .child(
+                        components::button("reader-back", "Volver", None, ButtonVariant::Secondary)
+                            .on_click(cx.listener(|this, _, _, cx| this.back_to_library(cx))),
+                    ),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_1()
+                    .flex_col()
+                    .items_center()
+                    .justify_center()
+                    .gap(px(6.))
+                    .child(
+                        div()
+                            .text_size(px(14.))
+                            .text_color(theme::text())
+                            .child(document.name.clone()),
+                    )
+                    .child(
+                        div()
+                            .text_size(px(11.))
+                            .text_color(theme::faint())
+                            .child(document.path.clone()),
+                    ),
+            )
+            .into_any_element()
+    }
+
     fn render_library(
         &mut self,
         compact: bool,
@@ -1025,6 +1091,7 @@ impl Render for NoctuaApp {
         let screen = match self.screen {
             Screen::Welcome => welcome::welcome(cx.listener(Self::choose_vault)).into_any_element(),
             Screen::Library => self.render_library(compact, viewport_height, viewport_width, cx),
+            Screen::Reader => self.render_reader(cx),
         };
 
         div()
