@@ -77,3 +77,10 @@ pub fn card_hover_bg() -> Rgba {
 pub fn button_hover() -> Rgba {
     rgb(0x22242d)
 }
+
+pub fn page() -> Rgba {
+    rgb(0xe9e9ee)
+}
+pub fn page_text() -> Rgba {
+    rgb(0x5c5f6b)
+}
