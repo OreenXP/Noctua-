@@ -690,6 +690,8 @@ impl NoctuaApp {
 
             let open_path = path.clone();
             let open_name = name.clone();
+            let external_path = path.clone();
+            let external_name = name.clone();
             let reveal_path = path.clone();
 
             overlays.push(
@@ -711,6 +713,14 @@ impl NoctuaApp {
                                     cx.listener(move |this, _, _, cx| {
                                         this.context = None;
                                         this.open_book(&open_path, &open_name, cx);
+                                    }),
+                                ))
+                                .child(components::menu_item(
+                                    "context-external",
+                                    "Abrir externo",
+                                    cx.listener(move |this, _, _, cx| {
+                                        this.context = None;
+                                        this.open_external(&external_path, &external_name, cx);
                                     }),
                                 ))
                                 .child(components::menu_item(

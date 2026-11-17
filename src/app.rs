@@ -275,6 +275,12 @@ impl NoctuaApp {
         cx.notify();
     }
 
+    pub(crate) fn open_external(&mut self, path: &str, name: &str, cx: &mut Context<Self>) {
+        cx.open_with_system(std::path::Path::new(path));
+        self.status = format!("Abierto con el visor del sistema · {name}");
+        cx.notify();
+    }
+
     fn focus_search(&mut self, _: &FocusSearch, window: &mut Window, cx: &mut Context<Self>) {
         let handle = self.search.read(cx).handle();
         window.focus(&handle, cx);
@@ -304,7 +310,12 @@ impl NoctuaApp {
         cx.notify();
     }
 
-    fn render_reader(&mut self, cx: &mut Context<Self>) -> AnyElement {
+    fn render_reader(
+        &mut self,
+        viewport_width: f32,
+        viewport_height: f32,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let Some(document) = &self.document else {
             return div().into_any_element();
         };
@@ -312,6 +323,8 @@ impl NoctuaApp {
         reader::reader(
             document.name.clone().into(),
             document.path.clone().into(),
+            viewport_width,
+            viewport_height,
             cx.listener(|this, _, _, cx| this.back_to_library(cx)),
         )
         .into_any_element()
@@ -328,7 +341,7 @@ impl Render for NoctuaApp {
         let screen = match self.screen {
             Screen::Welcome => welcome::welcome(cx.listener(Self::choose_vault)).into_any_element(),
             Screen::Library => self.render_library(compact, viewport_height, viewport_width, cx),
-            Screen::Reader => self.render_reader(cx),
+            Screen::Reader => self.render_reader(viewport_width, viewport_height, cx),
         };
 
         div()
