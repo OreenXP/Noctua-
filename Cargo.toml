@@ -14,5 +14,9 @@ serde_json = "1.0"
 chrono = "0.4"
 dirs = "5.0"
 
+[dev-dependencies]
+pdfium-render = "0.9.5"
+image = { version = "0.25", default-features = false, features = ["png"] }
+
 [profile.release]
 lto = "thin"
