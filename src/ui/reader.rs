@@ -1,28 +1,97 @@
 //! Pantalla de lectura de un documento abierto.
+
+use std::sync::Arc;
+
+use gpui::{
+    AnyElement, App, ClickEvent, Div, ObjectFit, RenderImage, SharedString, Stateful, Window, div,
+    img, prelude::*, px, svg,
+};
+
 use crate::ui::{
     components::{ButtonVariant, button},
     theme,
 };
-use gpui::{App, ClickEvent, SharedString, Window, div, prelude::*, px, svg};
 
 const HEADER_HEIGHT: f32 = 64.0;
 const FOOTER_HEIGHT: f32 = 44.0;
 const PAGE_MARGIN: f32 = 32.0;
-const PAGE_MAX_WIDTH: f32 = 720.0;
+const PAGE_MAX_WIDTH: f32 = 1400.0;
 const A4_RATIO: f32 = 0.707;
 
-/// Dibuja el lector con el nombre y la ruta del documento abierto.
-pub fn reader<F>(
-    name: SharedString,
-    path: SharedString,
+/// Datos que necesita la pantalla del lector.
+pub struct ReaderContent {
+    pub name: SharedString,
+    pub path: SharedString,
+    pub page: usize,
+    pub pages: usize,
+    pub image: Option<Arc<RenderImage>>,
+    pub error: Option<SharedString>,
+    pub dark_page: bool,
+}
+
+/// Dibuja el lector con el documento renderizado y su información.
+pub fn reader<F, G, H, I>(
+    content: ReaderContent,
     viewport_width: f32,
     viewport_height: f32,
     on_back: F,
+    on_prev: G,
+    on_next: H,
+    on_toggle_dark: I,
 ) -> impl IntoElement
 where
     F: Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+    G: Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+    H: Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+    I: Fn(&ClickEvent, &mut Window, &mut App) + 'static,
 {
     let (page_width, page_height) = page_size(viewport_width, viewport_height);
+    let page_label = if content.pages > 0 {
+        format!("Página {} de {}", content.page, content.pages)
+    } else {
+        format!("Página {}", content.page)
+    };
+
+    let page_body: AnyElement = match content.image.clone() {
+        Some(image) => img(image)
+            .size_full()
+            .object_fit(ObjectFit::Contain)
+            .into_any_element(),
+        None => {
+            let message = content
+                .error
+                .clone()
+                .unwrap_or_else(|| "Aquí aparecerá el documento".into());
+
+            let page_text_color = if content.dark_page {
+                theme::muted()
+            } else {
+                theme::page_text()
+            };
+
+            div()
+                .flex()
+                .flex_col()
+                .size_full()
+                .items_center()
+                .justify_center()
+                .gap(px(10.))
+                .p(px(24.))
+                .child(
+                    svg()
+                        .path("icons/file-text.svg")
+                        .size(px(28.))
+                        .text_color(page_text_color),
+                )
+                .child(
+                    div()
+                        .text_size(px(12.))
+                        .text_color(page_text_color)
+                        .child(message),
+                )
+                .into_any_element()
+        }
+    };
 
     div()
         .flex()
@@ -43,46 +112,59 @@ where
                 )
                 .child(
                     div()
-                        .text_size(px(12.))
-                        .text_color(theme::muted())
-                        .overflow_hidden()
-                        .whitespace_nowrap()
-                        .text_ellipsis()
-                        .child(name),
+                        .flex()
+                        .items_center()
+                        .gap(px(12.))
+                        .child(
+                            button(
+                                "reader-theme",
+                                if content.dark_page {
+                                    "Modo claro"
+                                } else {
+                                    "Modo oscuro"
+                                },
+                                None,
+                                ButtonVariant::Secondary,
+                            )
+                            .on_click(on_toggle_dark),
+                        )
+                        .child(
+                            div()
+                                .min_w_0()
+                                .text_size(px(12.))
+                                .text_color(theme::muted())
+                                .overflow_hidden()
+                                .whitespace_nowrap()
+                                .text_ellipsis()
+                                .child(content.name),
+                        ),
                 ),
         )
         .child(
             div()
+                .id(("reader-page", content.page))
                 .flex()
                 .flex_1()
+                .min_h_0()
                 .flex_col()
                 .items_center()
-                .justify_center()
+                .overflow_y_scroll()
+                .py(px(PAGE_MARGIN))
                 .child(
                     div()
-                        .flex()
-                        .flex_col()
-                        .items_center()
-                        .justify_center()
-                        .gap(px(10.))
+                        .flex_none()
                         .w(px(page_width))
                         .h(px(page_height))
+                        .overflow_hidden()
                         .rounded(px(4.))
-                        .bg(theme::page())
+                        .bg(if content.dark_page {
+                            theme::surface()
+                        } else {
+                            theme::page()
+                        })
                         .border_1()
                         .border_color(theme::border_strong())
-                        .child(
-                            svg()
-                                .path("icons/file-text.svg")
-                                .size(px(28.))
-                                .text_color(theme::page_text()),
-                        )
-                        .child(
-                            div()
-                                .text_size(px(12.))
-                                .text_color(theme::page_text())
-                                .child("Aquí aparecerá el documento"),
-                        ),
+                        .child(page_body),
                 ),
         )
         .child(
@@ -101,25 +183,51 @@ where
                         .whitespace_nowrap()
                         .text_ellipsis()
                         .text_color(theme::faint())
-                        .child(path),
+                        .child(content.path),
                 )
                 .child(
                     div()
-                        .text_size(px(11.))
-                        .text_color(theme::muted())
-                        .child("Página 1"),
+                        .flex()
+                        .items_center()
+                        .gap(px(8.))
+                        .child(page_button("reader-prev", "‹", on_prev))
+                        .child(
+                            div()
+                                .text_size(px(11.))
+                                .text_color(theme::muted())
+                                .child(page_label),
+                        )
+                        .child(page_button("reader-next", "›", on_next)),
                 ),
         )
 }
 
-/// Calcula el tamaño de la página para que quepa en la ventana sin deformarse.
-fn page_size(viewport_width: f32, viewport_height: f32) -> (f32, f32) {
+fn page_button<F>(id: &'static str, label: &'static str, on_click: F) -> Stateful<Div>
+where
+    F: Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+{
+    div()
+        .id(id)
+        .flex()
+        .items_center()
+        .justify_center()
+        .size(px(26.))
+        .rounded(px(6.))
+        .border_1()
+        .border_color(theme::border())
+        .bg(theme::surface_alt())
+        .text_size(px(14.))
+        .text_color(theme::text())
+        .cursor_pointer()
+        .hover(|style| style.bg(theme::surface_hover()))
+        .on_click(on_click)
+        .child(label)
+}
+
+/// Calcula el tamaño de la página ajustado al ancho de la ventana.
+pub(crate) fn page_size(viewport_width: f32, _viewport_height: f32) -> (f32, f32) {
     let available_width = (viewport_width - PAGE_MARGIN * 2.0).max(0.0);
-    let available_height =
-        (viewport_height - HEADER_HEIGHT - FOOTER_HEIGHT - PAGE_MARGIN * 2.0).max(0.0);
-    let width = (available_height * A4_RATIO)
-        .min(available_width)
-        .clamp(120.0, PAGE_MAX_WIDTH);
+    let width = available_width.clamp(240.0, PAGE_MAX_WIDTH);
     (width, width / A4_RATIO)
 }
 
@@ -128,13 +236,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn page_fits_in_a_small_window() {
-        let (width, height) = page_size(860.0, 560.0);
-        assert!(width <= 860.0 - PAGE_MARGIN * 2.0);
-        assert!(
-            height <= 560.0 - HEADER_HEIGHT - FOOTER_HEIGHT - PAGE_MARGIN * 2.0 + 0.01,
-            "la página no debe desbordar el alto disponible"
-        );
+    fn page_fits_the_width() {
+        let (width, _) = page_size(860.0, 560.0);
+        assert!(width <= 860.0 - PAGE_MARGIN * 2.0 + 0.01);
+        assert!(width >= 240.0);
     }
 
     #[test]

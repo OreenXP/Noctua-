@@ -5,7 +5,7 @@ mod library;
 mod pdf;
 mod ui;
 
-use app::{CloseOverlay, FocusSearch, NoctuaApp};
+use app::{CloseOverlay, FocusSearch, NextPage, NoctuaApp, PrevPage};
 use gpui::{App, AppContext as _, Bounds, KeyBinding, WindowBounds, WindowOptions, px, size};
 use gpui_platform::application;
 use ui::assets::Assets;
@@ -19,6 +19,12 @@ fn bind_keys(cx: &mut App) {
     cx.bind_keys([
         KeyBinding::new("ctrl-k", FocusSearch, None),
         KeyBinding::new("escape", CloseOverlay, None),
+        KeyBinding::new("pagedown", NextPage, None),
+        KeyBinding::new("pageup", PrevPage, None),
+        KeyBinding::new("right", NextPage, None),
+        KeyBinding::new("down", NextPage, None),
+        KeyBinding::new("left", PrevPage, None),
+        KeyBinding::new("up", PrevPage, None),
         KeyBinding::new("backspace", Backspace, text),
         KeyBinding::new("delete", Delete, text),
         KeyBinding::new("left", Left, text),

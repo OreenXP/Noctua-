@@ -3,16 +3,19 @@
 //! El dibujado de cada pantalla vive en `ui::library` y `ui::reader`.
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use gpui::{
     AnyElement, ClickEvent, Context, Entity, FocusHandle, PathPromptOptions, Pixels, Point, Render,
-    Window, actions, div, prelude::*, px,
+    RenderImage, Window, actions, div, prelude::*, px,
 };
+use pdfium_bundled::pdfium_render::prelude::*;
 
 use crate::library::{self, Book};
+use crate::pdf;
 use crate::ui::{reader, text_input::TextInput, theme, welcome};
 
-actions!(noctua, [FocusSearch, CloseOverlay]);
+actions!(noctua, [FocusSearch, CloseOverlay, NextPage, PrevPage]);
 
 const COMPACT_WIDTH: f32 = 980.0;
 
@@ -49,6 +52,8 @@ pub(crate) enum View {
 struct Document {
     path: String,
     name: String,
+    page: usize,
+    pages: usize,
 }
 
 pub(crate) struct ContextMenuState {
@@ -60,6 +65,10 @@ pub(crate) struct ContextMenuState {
 pub struct NoctuaApp {
     screen: Screen,
     document: Option<Document>,
+    pdfium: Option<Pdfium>,
+    page_image: Option<Arc<RenderImage>>,
+    page_error: Option<String>,
+    dark_page: bool,
     pub(crate) vault: Option<PathBuf>,
     pub(crate) books: Vec<Book>,
     pub(crate) filtered: Vec<usize>,
@@ -87,6 +96,10 @@ impl NoctuaApp {
                 Screen::Welcome
             },
             document: None,
+            pdfium: None,
+            page_image: None,
+            page_error: None,
+            dark_page: true,
             vault,
             books: Vec::new(),
             filtered: Vec::new(),
@@ -260,14 +273,89 @@ impl NoctuaApp {
         .detach();
     }
 
-    pub(crate) fn open_book(&mut self, path: &str, name: &str, cx: &mut Context<Self>) {
+    pub(crate) fn open_book(
+        &mut self,
+        path: &str,
+        name: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.document = Some(Document {
             path: path.to_string(),
             name: name.to_string(),
+            page: 1,
+            pages: 0,
         });
+        self.page_image = None;
+        self.page_error = None;
         self.screen = Screen::Reader;
-        self.status = format!("Abierto · {name}");
+        window.focus(&self.focus_handle, cx);
+        self.status = format!("Abriendo · {name}");
+        self.load_page(0);
         cx.notify();
+    }
+
+    fn load_page(&mut self, page_index: usize) {
+        let Some(path) = self.document.as_ref().map(|document| document.path.clone()) else {
+            return;
+        };
+
+        match self.render_page(&path, page_index) {
+            Ok((image, pages)) => {
+                if let Some(document) = self.document.as_mut() {
+                    document.page = page_index + 1;
+                    document.pages = pages;
+                }
+                self.page_image = Some(Arc::new(image));
+                self.page_error = None;
+                self.status = format!("Página {} de {pages}", page_index + 1);
+            }
+            Err(error) => {
+                self.page_image = None;
+                self.page_error = Some(error.clone());
+                self.status = error;
+            }
+        }
+    }
+
+    fn render_page(
+        &mut self,
+        path: &str,
+        page_index: usize,
+    ) -> Result<(RenderImage, usize), String> {
+        if self.pdfium.is_none() {
+            self.pdfium = Some(
+                pdfium_bundled::bind_pdfium_silent()
+                    .map_err(|error| format!("No se pudo cargar pdfium: {error}"))?,
+            );
+        }
+
+        let pdfium = self.pdfium.as_ref().expect("pdfium inicializado");
+        let document = pdfium
+            .load_pdf_from_file(path, None)
+            .map_err(|error| format!("No se pudo abrir el PDF: {error}"))?;
+        let pages = document.pages().len() as usize;
+        let page = document
+            .pages()
+            .get(page_index as i32)
+            .map_err(|error| format!("No se pudo leer la página: {error}"))?;
+
+        let config = PdfRenderConfig::new().set_target_width(1600);
+        let bitmap = page
+            .render_with_config(&config)
+            .map_err(|error| format!("No se pudo renderizar la página: {error}"))?;
+
+        let width = bitmap.width() as u32;
+        let height = bitmap.height() as u32;
+        let mut rgba = bitmap.as_rgba_bytes();
+        if self.dark_page && pdf::is_mostly_light(&rgba) {
+            pdf::darken_rgba(&mut rgba);
+        }
+
+        let buffer = image::RgbaImage::from_raw(width, height, rgba)
+            .ok_or_else(|| "El bitmap renderizado tiene un tamaño inesperado".to_string())?;
+
+        Ok((RenderImage::new(vec![image::Frame::new(buffer)]), pages))
     }
 
     pub(crate) fn reveal_book(&mut self, path: &str, cx: &mut Context<Self>) {
@@ -286,20 +374,25 @@ impl NoctuaApp {
         window.focus(&handle, cx);
     }
 
-    fn close_overlay(&mut self, _: &CloseOverlay, _: &mut Window, cx: &mut Context<Self>) {
+    fn close_overlay(&mut self, _: &CloseOverlay, window: &mut Window, cx: &mut Context<Self>) {
         if self.context.is_some() || self.sort_open {
             self.context = None;
             self.sort_open = false;
             cx.notify();
         }
         if self.screen == Screen::Reader {
-            self.back_to_library(cx);
+            self.back_to_library(window, cx);
         }
     }
 
-    fn back_to_library(&mut self, cx: &mut Context<Self>) {
+    fn back_to_library(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.screen = Screen::Library;
         self.document = None;
+        self.page_image = None;
+        self.page_error = None;
+
+        let handle = self.search.read(cx).handle();
+        window.focus(&handle, cx);
         cx.notify();
     }
 
@@ -307,6 +400,47 @@ impl NoctuaApp {
         self.sort = sort;
         self.sort_open = false;
         self.apply_filters();
+        cx.notify();
+    }
+
+    fn next_page(&mut self, _: &NextPage, _: &mut Window, cx: &mut Context<Self>) {
+        self.change_page(1, cx);
+    }
+
+    fn prev_page(&mut self, _: &PrevPage, _: &mut Window, cx: &mut Context<Self>) {
+        self.change_page(-1, cx);
+    }
+
+    fn change_page(&mut self, delta: isize, cx: &mut Context<Self>) {
+        if self.screen != Screen::Reader {
+            return;
+        }
+        let Some(document) = self.document.as_ref() else {
+            return;
+        };
+
+        let current = document.page.saturating_sub(1) as isize;
+        let last = document.pages.saturating_sub(1) as isize;
+        let target = (current + delta).clamp(0, last);
+        if target == current {
+            return;
+        }
+
+        self.load_page(target as usize);
+        cx.notify();
+    }
+
+    fn toggle_dark_page(&mut self, _: &ClickEvent, _: &mut Window, cx: &mut Context<Self>) {
+        self.dark_page = !self.dark_page;
+
+        if let Some(page) = self
+            .document
+            .as_ref()
+            .map(|document| document.page.saturating_sub(1))
+        {
+            self.load_page(page);
+        }
+
         cx.notify();
     }
 
@@ -320,12 +454,24 @@ impl NoctuaApp {
             return div().into_any_element();
         };
 
+        let content = reader::ReaderContent {
+            name: document.name.clone().into(),
+            path: document.path.clone().into(),
+            page: document.page,
+            pages: document.pages,
+            image: self.page_image.clone(),
+            error: self.page_error.clone().map(Into::into),
+            dark_page: self.dark_page,
+        };
+
         reader::reader(
-            document.name.clone().into(),
-            document.path.clone().into(),
+            content,
             viewport_width,
             viewport_height,
-            cx.listener(|this, _, _, cx| this.back_to_library(cx)),
+            cx.listener(|this, _, window, cx| this.back_to_library(window, cx)),
+            cx.listener(|this, _, _, cx| this.change_page(-1, cx)),
+            cx.listener(|this, _, _, cx| this.change_page(1, cx)),
+            cx.listener(Self::toggle_dark_page),
         )
         .into_any_element()
     }
@@ -354,6 +500,8 @@ impl Render for NoctuaApp {
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(Self::focus_search))
             .on_action(cx.listener(Self::close_overlay))
+            .on_action(cx.listener(Self::next_page))
+            .on_action(cx.listener(Self::prev_page))
             .child(screen)
             .children(self.render_overlays(cx))
     }
