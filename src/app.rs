@@ -7,11 +7,12 @@ use std::sync::Arc;
 
 use gpui::{
     AnyElement, ClickEvent, Context, Entity, FocusHandle, PathPromptOptions, Pixels, Point, Render,
-    RenderImage, ScrollDelta, ScrollEvent, Window, actions, div, prelude::*, px,
+    RenderImage, Window, actions, div, prelude::*, px,
 };
 use pdfium_render::prelude::*;
 
 use crate::library::{self, Book};
+use crate::pdf;
 use crate::ui::{reader, text_input::TextInput, theme, welcome};
 
 actions!(noctua, [FocusSearch, CloseOverlay, NextPage, PrevPage]);
@@ -67,7 +68,7 @@ pub struct NoctuaApp {
     pdfium: Option<Pdfium>,
     page_image: Option<Arc<RenderImage>>,
     page_error: Option<String>,
-    scroll_accum: f32,
+    dark_page: bool,
     pub(crate) vault: Option<PathBuf>,
     pub(crate) books: Vec<Book>,
     pub(crate) filtered: Vec<usize>,
@@ -98,7 +99,7 @@ impl NoctuaApp {
             pdfium: None,
             page_image: None,
             page_error: None,
-            scroll_accum: 0.0,
+            dark_page: true,
             vault,
             books: Vec::new(),
             filtered: Vec::new(),
@@ -287,7 +288,6 @@ impl NoctuaApp {
         });
         self.page_image = None;
         self.page_error = None;
-        self.scroll_accum = 0.0;
         self.screen = Screen::Reader;
         window.focus(&self.focus_handle, cx);
         self.status = format!("Abriendo · {name}");
@@ -341,14 +341,18 @@ impl NoctuaApp {
             .get(page_index as i32)
             .map_err(|error| format!("No se pudo leer la página: {error}"))?;
 
-        let config = PdfRenderConfig::new().set_target_width(1200);
+        let config = PdfRenderConfig::new().set_target_width(1600);
         let bitmap = page
             .render_with_config(&config)
             .map_err(|error| format!("No se pudo renderizar la página: {error}"))?;
 
         let width = bitmap.width() as u32;
         let height = bitmap.height() as u32;
-        let rgba = bitmap.as_rgba_bytes();
+        let mut rgba = bitmap.as_rgba_bytes();
+        if self.dark_page && pdf::is_mostly_light(&rgba) {
+            pdf::darken_rgba(&mut rgba);
+        }
+
         let buffer = image::RgbaImage::from_raw(width, height, rgba)
             .ok_or_else(|| "El bitmap renderizado tiene un tamaño inesperado".to_string())?;
 
@@ -387,7 +391,6 @@ impl NoctuaApp {
         self.document = None;
         self.page_image = None;
         self.page_error = None;
-        self.scroll_accum = 0.0;
 
         let handle = self.search.read(cx).handle();
         window.focus(&handle, cx);
@@ -428,24 +431,18 @@ impl NoctuaApp {
         cx.notify();
     }
 
-    fn scroll_pages(&mut self, event: &ScrollEvent, _: &mut Window, cx: &mut Context<Self>) {
-        if self.screen != Screen::Reader {
-            return;
+    fn toggle_dark_page(&mut self, _: &ClickEvent, _: &mut Window, cx: &mut Context<Self>) {
+        self.dark_page = !self.dark_page;
+
+        if let Some(page) = self
+            .document
+            .as_ref()
+            .map(|document| document.page.saturating_sub(1))
+        {
+            self.load_page(page);
         }
 
-        let delta = match event.delta {
-            ScrollDelta::Lines(point) => point.y,
-            ScrollDelta::Pixels(point) => f32::from(point.y) / 40.0,
-        };
-        self.scroll_accum += delta;
-
-        if self.scroll_accum >= 3.0 {
-            self.scroll_accum = 0.0;
-            self.change_page(1, cx);
-        } else if self.scroll_accum <= -3.0 {
-            self.scroll_accum = 0.0;
-            self.change_page(-1, cx);
-        }
+        cx.notify();
     }
 
     fn render_reader(
@@ -465,6 +462,7 @@ impl NoctuaApp {
             pages: document.pages,
             image: self.page_image.clone(),
             error: self.page_error.clone().map(Into::into),
+            dark_page: self.dark_page,
         };
 
         reader::reader(
@@ -474,6 +472,7 @@ impl NoctuaApp {
             cx.listener(|this, _, window, cx| this.back_to_library(window, cx)),
             cx.listener(|this, _, _, cx| this.change_page(-1, cx)),
             cx.listener(|this, _, _, cx| this.change_page(1, cx)),
+            cx.listener(Self::toggle_dark_page),
         )
         .into_any_element()
     }
@@ -489,11 +488,7 @@ impl Render for NoctuaApp {
         let screen = match self.screen {
             Screen::Welcome => welcome::welcome(cx.listener(Self::choose_vault)).into_any_element(),
             Screen::Library => self.render_library(compact, viewport_height, viewport_width, cx),
-            Screen::Reader => div()
-                .size_full()
-                .on_scroll(cx.listener(Self::scroll_pages))
-                .child(self.render_reader(viewport_width, viewport_height, cx))
-                .into_any_element(),
+            Screen::Reader => self.render_reader(viewport_width, viewport_height, cx),
         };
 
         div()

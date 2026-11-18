@@ -15,7 +15,7 @@ use crate::ui::{
 const HEADER_HEIGHT: f32 = 64.0;
 const FOOTER_HEIGHT: f32 = 44.0;
 const PAGE_MARGIN: f32 = 32.0;
-const PAGE_MAX_WIDTH: f32 = 720.0;
+const PAGE_MAX_WIDTH: f32 = 1400.0;
 const A4_RATIO: f32 = 0.707;
 
 /// Datos que necesita la pantalla del lector.
@@ -26,21 +26,24 @@ pub struct ReaderContent {
     pub pages: usize,
     pub image: Option<Arc<RenderImage>>,
     pub error: Option<SharedString>,
+    pub dark_page: bool,
 }
 
 /// Dibuja el lector con el documento renderizado y su información.
-pub fn reader<F, G, H>(
+pub fn reader<F, G, H, I>(
     content: ReaderContent,
     viewport_width: f32,
     viewport_height: f32,
     on_back: F,
     on_prev: G,
     on_next: H,
+    on_toggle_dark: I,
 ) -> impl IntoElement
 where
     F: Fn(&ClickEvent, &mut Window, &mut App) + 'static,
     G: Fn(&ClickEvent, &mut Window, &mut App) + 'static,
     H: Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+    I: Fn(&ClickEvent, &mut Window, &mut App) + 'static,
 {
     let (page_width, page_height) = page_size(viewport_width, viewport_height);
     let page_label = if content.pages > 0 {
@@ -60,6 +63,12 @@ where
                 .clone()
                 .unwrap_or_else(|| "Aquí aparecerá el documento".into());
 
+            let page_text_color = if content.dark_page {
+                theme::muted()
+            } else {
+                theme::page_text()
+            };
+
             div()
                 .flex()
                 .flex_col()
@@ -72,12 +81,12 @@ where
                     svg()
                         .path("icons/file-text.svg")
                         .size(px(28.))
-                        .text_color(theme::page_text()),
+                        .text_color(page_text_color),
                 )
                 .child(
                     div()
                         .text_size(px(12.))
-                        .text_color(theme::page_text())
+                        .text_color(page_text_color)
                         .child(message),
                 )
                 .into_any_element()
@@ -103,26 +112,60 @@ where
                 )
                 .child(
                     div()
-                        .text_size(px(12.))
-                        .text_color(theme::muted())
-                        .overflow_hidden()
-                        .whitespace_nowrap()
-                        .text_ellipsis()
-                        .child(content.name),
+                        .flex()
+                        .items_center()
+                        .gap(px(12.))
+                        .child(
+                            button(
+                                "reader-theme",
+                                if content.dark_page {
+                                    "Modo claro"
+                                } else {
+                                    "Modo oscuro"
+                                },
+                                None,
+                                ButtonVariant::Secondary,
+                            )
+                            .on_click(on_toggle_dark),
+                        )
+                        .child(
+                            div()
+                                .min_w_0()
+                                .text_size(px(12.))
+                                .text_color(theme::muted())
+                                .overflow_hidden()
+                                .whitespace_nowrap()
+                                .text_ellipsis()
+                                .child(content.name),
+                        ),
                 ),
         )
         .child(
-            div().flex().flex_1().items_center().justify_center().child(
-                div()
-                    .w(px(page_width))
-                    .h(px(page_height))
-                    .overflow_hidden()
-                    .rounded(px(4.))
-                    .bg(theme::page())
-                    .border_1()
-                    .border_color(theme::border_strong())
-                    .child(page_body),
-            ),
+            div()
+                .id(("reader-page", content.page))
+                .flex()
+                .flex_1()
+                .min_h_0()
+                .flex_col()
+                .items_center()
+                .overflow_y_scroll()
+                .py(px(PAGE_MARGIN))
+                .child(
+                    div()
+                        .flex_none()
+                        .w(px(page_width))
+                        .h(px(page_height))
+                        .overflow_hidden()
+                        .rounded(px(4.))
+                        .bg(if content.dark_page {
+                            theme::surface()
+                        } else {
+                            theme::page()
+                        })
+                        .border_1()
+                        .border_color(theme::border_strong())
+                        .child(page_body),
+                ),
         )
         .child(
             div()
@@ -181,14 +224,10 @@ where
         .child(label)
 }
 
-/// Calcula el tamaño de la página para que quepa en la ventana sin deformarse.
-fn page_size(viewport_width: f32, viewport_height: f32) -> (f32, f32) {
+/// Calcula el tamaño de la página ajustado al ancho de la ventana.
+pub(crate) fn page_size(viewport_width: f32, _viewport_height: f32) -> (f32, f32) {
     let available_width = (viewport_width - PAGE_MARGIN * 2.0).max(0.0);
-    let available_height =
-        (viewport_height - HEADER_HEIGHT - FOOTER_HEIGHT - PAGE_MARGIN * 2.0).max(0.0);
-    let width = (available_height * A4_RATIO)
-        .min(available_width)
-        .clamp(120.0, PAGE_MAX_WIDTH);
+    let width = available_width.clamp(240.0, PAGE_MAX_WIDTH);
     (width, width / A4_RATIO)
 }
 
@@ -197,13 +236,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn page_fits_in_a_small_window() {
-        let (width, height) = page_size(860.0, 560.0);
-        assert!(width <= 860.0 - PAGE_MARGIN * 2.0);
-        assert!(
-            height <= 560.0 - HEADER_HEIGHT - FOOTER_HEIGHT - PAGE_MARGIN * 2.0 + 0.01,
-            "la página no debe desbordar el alto disponible"
-        );
+    fn page_fits_the_width() {
+        let (width, _) = page_size(860.0, 560.0);
+        assert!(width <= 860.0 - PAGE_MARGIN * 2.0 + 0.01);
+        assert!(width >= 240.0);
     }
 
     #[test]
