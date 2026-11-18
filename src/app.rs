@@ -9,7 +9,7 @@ use gpui::{
     AnyElement, ClickEvent, Context, Entity, FocusHandle, PathPromptOptions, Pixels, Point, Render,
     RenderImage, Window, actions, div, prelude::*, px,
 };
-use pdfium_render::prelude::*;
+use pdfium_bundled::pdfium_render::prelude::*;
 
 use crate::library::{self, Book};
 use crate::pdf;
@@ -324,11 +324,10 @@ impl NoctuaApp {
         page_index: usize,
     ) -> Result<(RenderImage, usize), String> {
         if self.pdfium.is_none() {
-            let library = Pdfium::pdfium_platform_library_name_at_path("vendor/pdfium");
-            let bindings = Pdfium::bind_to_library(&library)
-                .or_else(|_| Pdfium::bind_to_system_library())
-                .map_err(|error| format!("No se pudo cargar pdfium: {error}"))?;
-            self.pdfium = Some(Pdfium::new(bindings));
+            self.pdfium = Some(
+                pdfium_bundled::bind_pdfium_silent()
+                    .map_err(|error| format!("No se pudo cargar pdfium: {error}"))?,
+            );
         }
 
         let pdfium = self.pdfium.as_ref().expect("pdfium inicializado");

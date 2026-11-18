@@ -6,9 +6,7 @@
 
 use std::env;
 
-use pdfium_render::prelude::*;
-
-const PDFIUM_DIR: &str = "vendor/pdfium";
+use pdfium_bundled::pdfium_render::prelude::*;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
@@ -21,16 +19,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .cloned()
         .unwrap_or_else(|| "/tmp/opencode/page1.png".to_string());
 
-    let library = Pdfium::pdfium_platform_library_name_at_path(PDFIUM_DIR);
-    if !library.exists() {
-        return Err(format!(
-            "no se encontró {}; ejecuta scripts/fetch-pdfium.sh",
-            library.display()
-        )
-        .into());
-    }
-
-    let pdfium = Pdfium::new(Pdfium::bind_to_library(&library)?);
+    let pdfium = pdfium_bundled::bind_pdfium_silent()?;
 
     let document = pdfium.load_pdf_from_file(input, None)?;
     println!("PDF abierto: {} páginas", document.pages().len());
