@@ -3,16 +3,18 @@
 //! El dibujado de cada pantalla vive en `ui::library` y `ui::reader`.
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use gpui::{
     AnyElement, ClickEvent, Context, Entity, FocusHandle, PathPromptOptions, Pixels, Point, Render,
-    Window, actions, div, prelude::*, px,
+    RenderImage, ScrollDelta, ScrollEvent, Window, actions, div, prelude::*, px,
 };
+use pdfium_render::prelude::*;
 
 use crate::library::{self, Book};
 use crate::ui::{reader, text_input::TextInput, theme, welcome};
 
-actions!(noctua, [FocusSearch, CloseOverlay]);
+actions!(noctua, [FocusSearch, CloseOverlay, NextPage, PrevPage]);
 
 const COMPACT_WIDTH: f32 = 980.0;
 
@@ -49,6 +51,8 @@ pub(crate) enum View {
 struct Document {
     path: String,
     name: String,
+    page: usize,
+    pages: usize,
 }
 
 pub(crate) struct ContextMenuState {
@@ -60,6 +64,10 @@ pub(crate) struct ContextMenuState {
 pub struct NoctuaApp {
     screen: Screen,
     document: Option<Document>,
+    pdfium: Option<Pdfium>,
+    page_image: Option<Arc<RenderImage>>,
+    page_error: Option<String>,
+    scroll_accum: f32,
     pub(crate) vault: Option<PathBuf>,
     pub(crate) books: Vec<Book>,
     pub(crate) filtered: Vec<usize>,
@@ -87,6 +95,10 @@ impl NoctuaApp {
                 Screen::Welcome
             },
             document: None,
+            pdfium: None,
+            page_image: None,
+            page_error: None,
+            scroll_accum: 0.0,
             vault,
             books: Vec::new(),
             filtered: Vec::new(),
@@ -260,14 +272,87 @@ impl NoctuaApp {
         .detach();
     }
 
-    pub(crate) fn open_book(&mut self, path: &str, name: &str, cx: &mut Context<Self>) {
+    pub(crate) fn open_book(
+        &mut self,
+        path: &str,
+        name: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.document = Some(Document {
             path: path.to_string(),
             name: name.to_string(),
+            page: 1,
+            pages: 0,
         });
+        self.page_image = None;
+        self.page_error = None;
+        self.scroll_accum = 0.0;
         self.screen = Screen::Reader;
-        self.status = format!("Abierto · {name}");
+        window.focus(&self.focus_handle, cx);
+        self.status = format!("Abriendo · {name}");
+        self.load_page(0);
         cx.notify();
+    }
+
+    fn load_page(&mut self, page_index: usize) {
+        let Some(path) = self.document.as_ref().map(|document| document.path.clone()) else {
+            return;
+        };
+
+        match self.render_page(&path, page_index) {
+            Ok((image, pages)) => {
+                if let Some(document) = self.document.as_mut() {
+                    document.page = page_index + 1;
+                    document.pages = pages;
+                }
+                self.page_image = Some(Arc::new(image));
+                self.page_error = None;
+                self.status = format!("Página {} de {pages}", page_index + 1);
+            }
+            Err(error) => {
+                self.page_image = None;
+                self.page_error = Some(error.clone());
+                self.status = error;
+            }
+        }
+    }
+
+    fn render_page(
+        &mut self,
+        path: &str,
+        page_index: usize,
+    ) -> Result<(RenderImage, usize), String> {
+        if self.pdfium.is_none() {
+            let library = Pdfium::pdfium_platform_library_name_at_path("vendor/pdfium");
+            let bindings = Pdfium::bind_to_library(&library)
+                .or_else(|_| Pdfium::bind_to_system_library())
+                .map_err(|error| format!("No se pudo cargar pdfium: {error}"))?;
+            self.pdfium = Some(Pdfium::new(bindings));
+        }
+
+        let pdfium = self.pdfium.as_ref().expect("pdfium inicializado");
+        let document = pdfium
+            .load_pdf_from_file(path, None)
+            .map_err(|error| format!("No se pudo abrir el PDF: {error}"))?;
+        let pages = document.pages().len() as usize;
+        let page = document
+            .pages()
+            .get(page_index as i32)
+            .map_err(|error| format!("No se pudo leer la página: {error}"))?;
+
+        let config = PdfRenderConfig::new().set_target_width(1200);
+        let bitmap = page
+            .render_with_config(&config)
+            .map_err(|error| format!("No se pudo renderizar la página: {error}"))?;
+
+        let width = bitmap.width() as u32;
+        let height = bitmap.height() as u32;
+        let rgba = bitmap.as_rgba_bytes();
+        let buffer = image::RgbaImage::from_raw(width, height, rgba)
+            .ok_or_else(|| "El bitmap renderizado tiene un tamaño inesperado".to_string())?;
+
+        Ok((RenderImage::new(vec![image::Frame::new(buffer)]), pages))
     }
 
     pub(crate) fn reveal_book(&mut self, path: &str, cx: &mut Context<Self>) {
@@ -286,20 +371,26 @@ impl NoctuaApp {
         window.focus(&handle, cx);
     }
 
-    fn close_overlay(&mut self, _: &CloseOverlay, _: &mut Window, cx: &mut Context<Self>) {
+    fn close_overlay(&mut self, _: &CloseOverlay, window: &mut Window, cx: &mut Context<Self>) {
         if self.context.is_some() || self.sort_open {
             self.context = None;
             self.sort_open = false;
             cx.notify();
         }
         if self.screen == Screen::Reader {
-            self.back_to_library(cx);
+            self.back_to_library(window, cx);
         }
     }
 
-    fn back_to_library(&mut self, cx: &mut Context<Self>) {
+    fn back_to_library(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.screen = Screen::Library;
         self.document = None;
+        self.page_image = None;
+        self.page_error = None;
+        self.scroll_accum = 0.0;
+
+        let handle = self.search.read(cx).handle();
+        window.focus(&handle, cx);
         cx.notify();
     }
 
@@ -308,6 +399,53 @@ impl NoctuaApp {
         self.sort_open = false;
         self.apply_filters();
         cx.notify();
+    }
+
+    fn next_page(&mut self, _: &NextPage, _: &mut Window, cx: &mut Context<Self>) {
+        self.change_page(1, cx);
+    }
+
+    fn prev_page(&mut self, _: &PrevPage, _: &mut Window, cx: &mut Context<Self>) {
+        self.change_page(-1, cx);
+    }
+
+    fn change_page(&mut self, delta: isize, cx: &mut Context<Self>) {
+        if self.screen != Screen::Reader {
+            return;
+        }
+        let Some(document) = self.document.as_ref() else {
+            return;
+        };
+
+        let current = document.page.saturating_sub(1) as isize;
+        let last = document.pages.saturating_sub(1) as isize;
+        let target = (current + delta).clamp(0, last);
+        if target == current {
+            return;
+        }
+
+        self.load_page(target as usize);
+        cx.notify();
+    }
+
+    fn scroll_pages(&mut self, event: &ScrollEvent, _: &mut Window, cx: &mut Context<Self>) {
+        if self.screen != Screen::Reader {
+            return;
+        }
+
+        let delta = match event.delta {
+            ScrollDelta::Lines(point) => point.y,
+            ScrollDelta::Pixels(point) => f32::from(point.y) / 40.0,
+        };
+        self.scroll_accum += delta;
+
+        if self.scroll_accum >= 3.0 {
+            self.scroll_accum = 0.0;
+            self.change_page(1, cx);
+        } else if self.scroll_accum <= -3.0 {
+            self.scroll_accum = 0.0;
+            self.change_page(-1, cx);
+        }
     }
 
     fn render_reader(
@@ -320,12 +458,22 @@ impl NoctuaApp {
             return div().into_any_element();
         };
 
+        let content = reader::ReaderContent {
+            name: document.name.clone().into(),
+            path: document.path.clone().into(),
+            page: document.page,
+            pages: document.pages,
+            image: self.page_image.clone(),
+            error: self.page_error.clone().map(Into::into),
+        };
+
         reader::reader(
-            document.name.clone().into(),
-            document.path.clone().into(),
+            content,
             viewport_width,
             viewport_height,
-            cx.listener(|this, _, _, cx| this.back_to_library(cx)),
+            cx.listener(|this, _, window, cx| this.back_to_library(window, cx)),
+            cx.listener(|this, _, _, cx| this.change_page(-1, cx)),
+            cx.listener(|this, _, _, cx| this.change_page(1, cx)),
         )
         .into_any_element()
     }
@@ -341,7 +489,11 @@ impl Render for NoctuaApp {
         let screen = match self.screen {
             Screen::Welcome => welcome::welcome(cx.listener(Self::choose_vault)).into_any_element(),
             Screen::Library => self.render_library(compact, viewport_height, viewport_width, cx),
-            Screen::Reader => self.render_reader(viewport_width, viewport_height, cx),
+            Screen::Reader => div()
+                .size_full()
+                .on_scroll(cx.listener(Self::scroll_pages))
+                .child(self.render_reader(viewport_width, viewport_height, cx))
+                .into_any_element(),
         };
 
         div()
@@ -354,6 +506,8 @@ impl Render for NoctuaApp {
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(Self::focus_search))
             .on_action(cx.listener(Self::close_overlay))
+            .on_action(cx.listener(Self::next_page))
+            .on_action(cx.listener(Self::prev_page))
             .child(screen)
             .children(self.render_overlays(cx))
     }

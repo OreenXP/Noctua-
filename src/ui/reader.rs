@@ -1,9 +1,16 @@
 //! Pantalla de lectura de un documento abierto.
+
+use std::sync::Arc;
+
+use gpui::{
+    AnyElement, App, ClickEvent, Div, ObjectFit, RenderImage, SharedString, Stateful, Window, div,
+    img, prelude::*, px, svg,
+};
+
 use crate::ui::{
     components::{ButtonVariant, button},
     theme,
 };
-use gpui::{App, ClickEvent, SharedString, Window, div, prelude::*, px, svg};
 
 const HEADER_HEIGHT: f32 = 64.0;
 const FOOTER_HEIGHT: f32 = 44.0;
@@ -11,18 +18,71 @@ const PAGE_MARGIN: f32 = 32.0;
 const PAGE_MAX_WIDTH: f32 = 720.0;
 const A4_RATIO: f32 = 0.707;
 
-/// Dibuja el lector con el nombre y la ruta del documento abierto.
-pub fn reader<F>(
-    name: SharedString,
-    path: SharedString,
+/// Datos que necesita la pantalla del lector.
+pub struct ReaderContent {
+    pub name: SharedString,
+    pub path: SharedString,
+    pub page: usize,
+    pub pages: usize,
+    pub image: Option<Arc<RenderImage>>,
+    pub error: Option<SharedString>,
+}
+
+/// Dibuja el lector con el documento renderizado y su información.
+pub fn reader<F, G, H>(
+    content: ReaderContent,
     viewport_width: f32,
     viewport_height: f32,
     on_back: F,
+    on_prev: G,
+    on_next: H,
 ) -> impl IntoElement
 where
     F: Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+    G: Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+    H: Fn(&ClickEvent, &mut Window, &mut App) + 'static,
 {
     let (page_width, page_height) = page_size(viewport_width, viewport_height);
+    let page_label = if content.pages > 0 {
+        format!("Página {} de {}", content.page, content.pages)
+    } else {
+        format!("Página {}", content.page)
+    };
+
+    let page_body: AnyElement = match content.image.clone() {
+        Some(image) => img(image)
+            .size_full()
+            .object_fit(ObjectFit::Contain)
+            .into_any_element(),
+        None => {
+            let message = content
+                .error
+                .clone()
+                .unwrap_or_else(|| "Aquí aparecerá el documento".into());
+
+            div()
+                .flex()
+                .flex_col()
+                .size_full()
+                .items_center()
+                .justify_center()
+                .gap(px(10.))
+                .p(px(24.))
+                .child(
+                    svg()
+                        .path("icons/file-text.svg")
+                        .size(px(28.))
+                        .text_color(theme::page_text()),
+                )
+                .child(
+                    div()
+                        .text_size(px(12.))
+                        .text_color(theme::page_text())
+                        .child(message),
+                )
+                .into_any_element()
+        }
+    };
 
     div()
         .flex()
@@ -48,42 +108,21 @@ where
                         .overflow_hidden()
                         .whitespace_nowrap()
                         .text_ellipsis()
-                        .child(name),
+                        .child(content.name),
                 ),
         )
         .child(
-            div()
-                .flex()
-                .flex_1()
-                .flex_col()
-                .items_center()
-                .justify_center()
-                .child(
-                    div()
-                        .flex()
-                        .flex_col()
-                        .items_center()
-                        .justify_center()
-                        .gap(px(10.))
-                        .w(px(page_width))
-                        .h(px(page_height))
-                        .rounded(px(4.))
-                        .bg(theme::page())
-                        .border_1()
-                        .border_color(theme::border_strong())
-                        .child(
-                            svg()
-                                .path("icons/file-text.svg")
-                                .size(px(28.))
-                                .text_color(theme::page_text()),
-                        )
-                        .child(
-                            div()
-                                .text_size(px(12.))
-                                .text_color(theme::page_text())
-                                .child("Aquí aparecerá el documento"),
-                        ),
-                ),
+            div().flex().flex_1().items_center().justify_center().child(
+                div()
+                    .w(px(page_width))
+                    .h(px(page_height))
+                    .overflow_hidden()
+                    .rounded(px(4.))
+                    .bg(theme::page())
+                    .border_1()
+                    .border_color(theme::border_strong())
+                    .child(page_body),
+            ),
         )
         .child(
             div()
@@ -101,15 +140,45 @@ where
                         .whitespace_nowrap()
                         .text_ellipsis()
                         .text_color(theme::faint())
-                        .child(path),
+                        .child(content.path),
                 )
                 .child(
                     div()
-                        .text_size(px(11.))
-                        .text_color(theme::muted())
-                        .child("Página 1"),
+                        .flex()
+                        .items_center()
+                        .gap(px(8.))
+                        .child(page_button("reader-prev", "‹", on_prev))
+                        .child(
+                            div()
+                                .text_size(px(11.))
+                                .text_color(theme::muted())
+                                .child(page_label),
+                        )
+                        .child(page_button("reader-next", "›", on_next)),
                 ),
         )
+}
+
+fn page_button<F>(id: &'static str, label: &'static str, on_click: F) -> Stateful<Div>
+where
+    F: Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+{
+    div()
+        .id(id)
+        .flex()
+        .items_center()
+        .justify_center()
+        .size(px(26.))
+        .rounded(px(6.))
+        .border_1()
+        .border_color(theme::border())
+        .bg(theme::surface_alt())
+        .text_size(px(14.))
+        .text_color(theme::text())
+        .cursor_pointer()
+        .hover(|style| style.bg(theme::surface_hover()))
+        .on_click(on_click)
+        .child(label)
 }
 
 /// Calcula el tamaño de la página para que quepa en la ventana sin deformarse.

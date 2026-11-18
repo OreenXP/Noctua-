@@ -376,10 +376,10 @@ impl NoctuaApp {
                 .when(!selected, |el| {
                     el.hover(|style| style.bg(theme::surface_hover()))
                 })
-                .on_click(cx.listener(move |this, event: &ClickEvent, _window, cx| {
+                .on_click(cx.listener(move |this, event: &ClickEvent, window, cx| {
                     this.context = None;
                     if event.click_count() >= 2 {
-                        this.open_book(&click_path, &click_name, cx);
+                        this.open_book(&click_path, &click_name, window, cx);
                     } else {
                         this.selected = Some(click_path.clone());
                         cx.notify();
@@ -487,10 +487,10 @@ impl NoctuaApp {
                             .text_color(theme::text())
                             .cursor_pointer()
                             .opacity(if selected || hovered { 1.0 } else { 0.0 })
-                            .on_click(cx.listener(move |this, _, _, cx| {
+                            .on_click(cx.listener(move |this, _, window, cx| {
                                 cx.stop_propagation();
                                 this.context = None;
-                                this.open_book(&button_path, &button_name, cx);
+                                this.open_book(&button_path, &button_name, window, cx);
                             }))
                             .child("Abrir"),
                     ),
@@ -541,10 +541,10 @@ impl NoctuaApp {
                             .bg(theme::card_hover_bg())
                     })
                 })
-                .on_click(cx.listener(move |this, event: &ClickEvent, _window, cx| {
+                .on_click(cx.listener(move |this, event: &ClickEvent, window, cx| {
                     this.context = None;
                     if event.click_count() >= 2 {
-                        this.open_book(&click_path, &click_name, cx);
+                        this.open_book(&click_path, &click_name, window, cx);
                     } else {
                         this.selected = Some(click_path.clone());
                         cx.notify();
@@ -612,11 +612,11 @@ impl NoctuaApp {
                         .text_size(px(12.))
                         .text_color(theme::text())
                         .cursor_pointer()
-                        .on_click(cx.listener(move |this, _, _, cx| {
+                        .on_click(cx.listener(move |this, _, window, cx| {
                             cx.stop_propagation();
                             this.context = None;
                             if this.selected.as_deref() == Some(button_path.as_str()) {
-                                this.open_book(&button_path, &button_name, cx);
+                                this.open_book(&button_path, &button_name, window, cx);
                             } else {
                                 this.selected = Some(button_path.clone());
                                 cx.notify();
@@ -710,9 +710,9 @@ impl NoctuaApp {
                                 .child(components::menu_item(
                                     "context-open",
                                     "Abrir",
-                                    cx.listener(move |this, _, _, cx| {
+                                    cx.listener(move |this, _, window, cx| {
                                         this.context = None;
-                                        this.open_book(&open_path, &open_name, cx);
+                                        this.open_book(&open_path, &open_name, window, cx);
                                     }),
                                 ))
                                 .child(components::menu_item(
